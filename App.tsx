@@ -1,15 +1,14 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useLocation } from 'react-router-dom';
-import { PrescriptionAnalysis, TimeOfDay, ReminderPreference, PatientInfo, User, Medicine, Language, UserRole } from './types.ts';
-import { geminiService } from './services/geminiService.ts';
-import { MOCK_PRESCRIPTION_DATA, TIME_ICONS } from './constants.tsx';
-import PrescriptionUpload from './components/PrescriptionUpload.tsx';
-import ScheduleCard from './components/ScheduleCard.tsx';
-import VoiceAssistant from './components/VoiceAssistant.tsx';
-import SmartChatbot from './components/SmartChatbot.tsx';
-import IncomingCallUI from './components/IncomingCallUI.tsx';
-import VoiceCommandCenter from './components/VoiceCommandCenter.tsx';
+import { PrescriptionAnalysis, TimeOfDay, PatientInfo, User, Language, UserRole } from './types';
+import { geminiService } from './services/geminiService';
+import { MOCK_PRESCRIPTION_DATA } from './constants';
+import PrescriptionUpload from './components/PrescriptionUpload';
+import ScheduleCard from './components/ScheduleCard';
+import VoiceAssistant from './components/VoiceAssistant';
+import SmartChatbot from './components/SmartChatbot';
+import IncomingCallUI from './components/IncomingCallUI';
+import VoiceCommandCenter from './components/VoiceCommandCenter';
 
 // --- TRANSLATIONS ---
 
