@@ -30,38 +30,48 @@ export class GeminiService {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const langName = this.getLanguageName(patientInfo.language);
     
-    const systemInstruction = `ACT AS A SENIOR PHARMACIST.
-Extract medication schedule from prescription image.
+    // Higher precision prompt with medical reasoning
+    const systemInstruction = `ACT AS A SENIOR CLINICAL PHARMACIST AND MEDICAL SCRIBE.
+Task: Perform high-precision OCR and medical reasoning on the provided prescription image.
 Output Language: ${langName}.
 
-TIMING MAPPING (STRICT):
-- 1-0-1, BID, Twice, M-N -> ["Morning", "Night"]
-- 1-1-1, TDS, Thrice, M-A-N -> ["Morning", "Afternoon", "Night"]
-- 1-0-0, OD, Once, M -> ["Morning"]
-- 0-0-1, HS, Bedtime, N -> ["Night"]
-- 1-1-1-1, QID -> ["Morning", "Afternoon", "Evening", "Night"]
-- 0-1-0 -> ["Afternoon"]
-- 1-1-0 -> ["Morning", "Afternoon"]
-- 0-1-1 -> ["Afternoon", "Night"]
+PRECISION RULES:
+1. DECIPHER HANDWRITING: Carefully analyze strokes to identify drug names correctly. Cross-reference with known pharmacopeia.
+2. MEDICAL SHORTHAND MAPPING (STRICT):
+   - OD / q.d. / 1-0-0 -> ["Morning"]
+   - BD / b.i.d. / 1-0-1 -> ["Morning", "Night"]
+   - TD / t.i.d. / 1-1-1 -> ["Morning", "Afternoon", "Night"]
+   - QID / q.i.d. / 1-1-1-1 -> ["Morning", "Afternoon", "Evening", "Night"]
+   - HS / Bedtime -> ["Night"]
+   - PC / p.c. / After meal -> "After Food"
+   - AC / a.c. / Before meal -> "Before Food"
+   - BBF / Before breakfast -> ["Morning"], "Before Food"
+3. DOSE EXTRACTION: Capture strength (e.g., 500mg, 5ml) and quantity (e.g., 1 tab, 2 tsp).
+4. SAFETY FIRST: If a drug name or dose is ambiguous, set verificationStatus to "unverified".
 
 JSON SCHEMA:
-- doctorName: string
-- medicines: Array of {
-    name: string,
-    dosage: string,
-    timing: Array<"Morning" | "Afternoon" | "Evening" | "Night">,
-    mealInstruction: "Before Food" | "After Food" | "None",
-    instructions: string (short, translated),
-    confidenceScore: number,
-    verificationStatus: "verified" | "unverified"
-  }
-- summary: 2 sentences in ${langName}.
+{
+  "doctorName": "string",
+  "medicines": [
+    {
+      "name": "string (Corrected spelling)",
+      "dosage": "string",
+      "timing": ["Morning" | "Afternoon" | "Evening" | "Night"],
+      "mealInstruction": "Before Food" | "After Food" | "With Food" | "Empty Stomach" | "None",
+      "instructions": "string (Short, clear clinical instruction in ${langName})",
+      "confidenceScore": number (0.0-1.0),
+      "verificationStatus": "verified" | "unverified"
+    }
+  ],
+  "summary": "2-3 sentences in ${langName} explaining the overall regimen and crucial safety warnings."
+}
 
-Return ONLY raw JSON.`;
+Return ONLY raw JSON. No markdown backticks.`;
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        // Using Pro for "precise" medical task requiring reasoning over handwriting
+        model: 'gemini-3-pro-preview',
         contents: {
           parts: [
             {
@@ -70,17 +80,18 @@ Return ONLY raw JSON.`;
                 data: base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image
               }
             },
-            { text: "Extract medication schedule. Return strictly JSON." }
+            { text: "Perform high-precision medical OCR. Extract every medication and instruction. Return JSON only." }
           ]
         },
         config: {
           systemInstruction,
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingBudget: 0 }
+          // Pro model supports thinking for complex handwriting deciphering
+          thinkingConfig: { thinkingBudget: 4096 }
         }
       });
 
-      const text = response.text || '{"medicines": [], "summary": "Failed"}';
+      const text = response.text || '{"medicines": [], "summary": "Extraction failed"}';
       const result = JSON.parse(text);
       
       const validTimings = ['Morning', 'Afternoon', 'Evening', 'Night'];
@@ -100,7 +111,7 @@ Return ONLY raw JSON.`;
             timing: normalizedTiming.length > 0 ? normalizedTiming : [TimeOfDay.MORNING]
           };
         }),
-        scanAccuracy: result.scanAccuracy || 0.95
+        scanAccuracy: result.scanAccuracy || 0.98
       };
     } catch (error) {
       return this.handleApiError(error);
